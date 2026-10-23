@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#99bdce">
+<title>Live Frame — Interactive Hand Experience</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+button,select,input{font:inherit}
+button{cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #518caa;outline-offset:5px}
+[hidden]{display:none!important}
+
+/* Intro Stage & World */
+#intro{position:fixed;inset:0;background:#a6c5d0;overflow:hidden;z-index:10;transition:opacity .7s,transform .9s cubic-bezier(.2,.7,.2,1)}
+#intro.leaving{opacity:0;transform:scale(1.045);pointer-events:none}
+#landscape,#characters{position:absolute;inset:0;width:100%;height:100%;display:block}
+#characters{pointer-events:none}
+
+.intro-top{position:absolute;top:28px;left:32px;right:32px;display:flex;align-items:center;justify-content:space-between;gap:20px;z-index:3}
+.wordmark{font-size:13px;letter-spacing:.17em;text-transform:uppercase;color:#263c40;font-weight:600}
+.sound{padding:9px 15px;border:1px solid #31444c40;border-radius:30px;background:#ffffff70;color:#23373c;backdrop-filter:blur(8px);font-size:12px;font-weight:500;transition:all .2s}
+.sound:hover{background:#ffffff99}
+.scene-note{position:absolute;bottom:24px;left:32px;color:#eaf1e8c9;font-size:11px;letter-spacing:.1em;text-transform:uppercase;pointer-events:none}
+
+/* Speech Bubble & Typewriter Effect */
+.speech{position:absolute;z-index:5;width:340px;max-width:calc(100vw - 32px);padding:22px 24px;background:#fffef9;border:2px solid #22342c;border-radius:20px;box-shadow:0 8px 24px #203b2525;color:#18231b;font-size:16px;line-height:1.5;transform:translate(-50%,-100%);transition:top .3s,left .3s}
+.speech:after{content:"";position:absolute;left:50%;bottom:-9px;width:16px;height:16px;background:#fffef9;border-right:2px solid #22342c;border-bottom:2px solid #22342c;transform:rotate(45deg)}
+.spoken{margin:0;min-height:26px}
+.typing:after{content:"▏";animation:blink .6s steps(1) infinite;color:#22342c;font-weight:bold}
+@keyframes blink{50%{opacity:0}}
+
+/* Choice Buttons */
+.choices{display:flex;gap:12px;margin-top:18px}
+.choices button,#again{border:2px solid #243b2d;border-radius:30px;padding:9px 24px;background:transparent;color:#243b2d;font-weight:600;transition:transform .15s,background .15s,color .15s}
+.choices #yes{background:#243b2d;color:#fff}
+.choices button:hover{transform:translateY(-2px)}
+.choices #yes:hover{background:#324d3c}
+.choices #no:hover{background:#243b2d15}
+
+/* White Circle / Noise Portal */
+#portal{position:absolute;border:0;padding:0;background:transparent;border-radius:50%;z-index:4;transform:translate(-50%,-50%);touch-action:manipulation;outline:none}
+#portal canvas{width:100%;height:100%;display:block;border-radius:50%;box-shadow:0 0 20px #ffffffcc,0 0 40px #ffffff66,0 12px 36px #101f2550}
+#portal.ready{cursor:pointer}
+#portal.ready:hover{transform:translate(-50%,-50%) scale(1.08)}
+#portal:disabled{cursor:default}
+
+#again{position:absolute;z-index:6;bottom:30px;left:50%;transform:translateX(-50%);background:#fffef9}
+
+/* Main App & Camera Interface */
+#app{position:fixed;inset:0;background:#101413;color:#f5f5f5;opacity:0;transition:opacity .7s}
+#app.visible{opacity:1}
+header{position:absolute;z-index:4;top:16px;left:20px;right:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{font-size:17px;font-weight:650;letter-spacing:-.4px;margin-right:auto}
+.brand span{font-weight:400;color:#9baba3}
+.panel{display:flex;align-items:center;gap:8px;background:#f6f6f6;color:#111;border-radius:12px;padding:8px;box-shadow:0 4px 24px #0002}
+.panel button,select{background:white;color:#151515;border:1px solid #ddd;border-radius:7px;padding:8px 10px}
+.panel button:hover{background:#eee}
+.panel button.primary{background:#171717;color:white;border-color:#171717}
+button:disabled{opacity:.55;cursor:wait}
+label{display:flex;align-items:center;gap:7px;font-size:12px;color:#444}
+input[type=range]{width:75px;accent-color:#111}
+main{height:100dvh;position:relative;overflow:hidden}
+video{display:none}
+#canvas{width:100%;height:100%;display:block;background:radial-gradient(ellipse at 50% 44%,#24332c 0%,#101613 70%)}
+.footer{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);padding:10px 15px;border-radius:9px;background:#f6f6f6e8;color:#333;text-align:center;font-size:12px;max-width:calc(100% - 32px)}
+.status{font-size:12px;color:#555}
+#error{position:absolute;top:100px;left:16px;right:16px;z-index:8;color:#fff;background:#743730;padding:12px;border-radius:8px;display:none}
+.empty{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;color:#b9c8bd;width:80%;font-size:13px;line-height:1.7}
+.empty svg{display:block;margin:0 auto 18px;opacity:.7}
+.empty strong{display:block;font-size:25px;color:#ecf0eb;font-weight:400;letter-spacing:-.6px;margin-bottom:10px}
+
+/* In-App Guide Stickman */
+#camera-guide{position:absolute;left:0;bottom:70px;width:100%;height:270px;pointer-events:none;z-index:6}
+#guide-art{position:absolute;bottom:0;left:12px;width:140px;height:200px}
+#guide-bubble{bottom:185px;left:160px;top:auto;width:380px;font-size:15px;transform:none}
+#guide-bubble:after{left:30px}
+#home{background:transparent;border:0;color:#9baba3;font-size:12px;padding:8px}
+#highlight{position:absolute;inset:-6px;border:2px solid #aacba7;border-radius:12px;pointer-events:none;animation:highlight 1.6s infinite}
+#start-wrap{position:relative}
+
+@keyframes highlight{50%{opacity:.25}}
+@media(max-width:740px){
+  .intro-top{top:20px;left:20px;right:20px}
+  .wordmark{font-size:11px}
+  .sound{font-size:11px}
+  .speech{font-size:14px;padding:16px 18px;width:290px}
+  .scene-note{left:20px;font-size:9px}
+  header{top:10px;left:10px;right:10px;gap:10px}
+  .brand{width:auto;flex:1}
+  .panel{width:100%;flex-wrap:wrap;gap:7px}
+  .panel button,select{padding:8px;font-size:12px}
+  .status{font-size:11px}
+  .footer{bottom:10px;width:calc(100% - 24px);font-size:11px}
+  #guide-bubble{left:20px;bottom:190px;width:calc(100vw - 40px);font-size:14px}
+  #guide-bubble:after{left:65px}
+  #camera-guide{bottom:65px}
+  #error{top:160px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*:before,*:after{animation-duration:.001ms!important;transition-duration:.001ms!important}
+}
+</style>
+</head>
+<body>
+
+<section id="intro" aria-label="Interactive Introduction">
+  <canvas id="landscape" aria-hidden="true"></canvas>
+  <canvas id="characters" aria-hidden="true"></canvas>
+  
+  <div class="intro-top">
+    <div class="wordmark">Live Frame / Hand Shapes</div>
+  </div>
+  
+  <div id="bubble" class="speech" hidden>
+    <p id="dialogue" class="spoken"></p>
+    <div id="choices" class="choices" hidden>
+      <button id="yes">Yes</button>
+      <button id="no">No</button>
+    </div>
+  </div>
+  
+  <button id="portal" aria-label="Enter the hand-shape camera" hidden disabled>
+    <canvas id="noise" width="256" height="256"></canvas>
+  </button>
+  
+  <button id="again" hidden>Meet him again</button>
+  <div class="scene-note" id="scene-note">A quiet landscape awaits.</div>
+</section>
+
+<section id="app" aria-label="Hand-shape camera" hidden inert>
+  <header>
+    <div class="brand">Live Frame <span>/ Hand Effects</span></div>
+    <button id="home">Back to the field ↗</button>
+    <div class="panel">
+      <span id="start-wrap">
+        <button class="primary" id="start">Turn on camera</button>
+        <span id="highlight" hidden></span>
+      </span>
+      <select id="effect" aria-label="Effect">
+        <option value="invert">Negative</option>
+        <option value="grayscale">Black & White</option>
+        <option value="sepia">Sepia</option>
+        <option value="blur">Blur</option>
+        <option value="contrast">Contrast</option>
+        <option value="saturate">Saturation</option>
+        <option value="hue">Hue Shift</option>
+        <option value="pixelate">Pixelate</option>
+        <option value="original">Original</option>
+      </select>
+      <label>Strength <input id="strength" aria-label="Effect strength" type="range" min="0" max="100" value="100"></label>
+      <label><input id="outline" type="checkbox" checked> Outline</label>
+      <span id="status" class="status">Camera off</span>
+    </div>
+  </header>
+
+  <div id="error" role="alert"></div>
+
+  <main>
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div id="empty" class="empty">
+      <svg width="64" height="48" viewBox="0 0 64 48" fill="none" aria-hidden="true">
+        <rect x="2" y="2" width="60" height="44" rx="10" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="32" cy="24" r="12" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="51" cy="12" r="2" fill="currentColor"/>
+      </svg>
+      <strong>Your hands. Your frame.</strong>
+      Point both index fingers and thumbs at the camera to form a custom shape window.
+    </div>
+
+    <!-- In-App Stickman Guide -->
+    <div id="camera-guide" hidden>
+      <canvas id="guide-art" width="280" height="400" aria-hidden="true"></canvas>
+      <div id="guide-bubble" class="speech" hidden>
+        <p id="guide-text" class="spoken"></p>
+      </div>
+    </div>
+
+    <div class="footer">Show both hands. Your thumbs and index fingers create the interactive frame.</div>
+  </main>
+</section>
+
+<script>
+'use strict';
+const $=id=>document.getElementById(id), sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let appOpen=false, scene='waiting', storyRun=0, actorX=1.2, actorDirection=-1, walking=false, dragging=false, portalX=-.3, portalVisible=false, lastNoise=-1, guideRun=0;
+let audio=null, soundOn=true, lastKey=0;
+
+// Web Audio Conversational Vocal Synth Generator (Celeste / Animal Crossing style)
+function initAudio(){
+  try{
+    audio??=new(window.AudioContext||window.webkitAudioContext)();
+    if(audio.state==='suspended') audio.resume();
+  }catch(e){}
+}
+
+document.addEventListener('pointerdown', initAudio);
+document.addEventListener('keydown', initAudio);
+
+function talkSound(c){
+  if(!soundOn||document.hidden) return;
+  initAudio();
+  if(!audio||audio.state!=='running') return;
+
+  const now=audio.currentTime;
+  if(now-lastKey<.045) return;
+  lastKey=now;
+
+  const osc=audio.createOscillator(), gain=audio.createGain(), filter=audio.createBiquadFilter();
+  const baseFreq=260+Math.random()*120;
+  
+  osc.type='sine';
+  osc.frequency.setValueAtTime(baseFreq, now);
+  osc.frequency.exponentialRampToValueAtTime(baseFreq*.82, now+.05);
+
+  filter.type='lowpass';
+  filter.frequency.value=1100;
+
+  gain.gain.setValueAtTime(.001, now);
+  gain.gain.linearRampToValueAtTime(.18, now+.008);
+  gain.gain.exponentialRampToValueAtTime(.001, now+.055);
+
+  osc.connect(filter).connect(gain).connect(audio.destination);
+  osc.start(now);
+  osc.stop(now+.06);
+}
+
+// Typewriter Animation Logic
+async function typeText(el,text,isCurrent){
+  el.textContent='';
+  el.classList.add('typing');
+  for(const c of text){
+    if(!isCurrent()){
+      el.classList.remove('typing');
+      return false;
+    }
+    el.textContent+=c;
+    if(c.trim()) talkSound(c);
+    await sleep(reduced?8:/[,.?!]/.test(c)?190:30+Math.random()*20);
+  }
+  el.classList.remove('typing');
+  return isCurrent();
+}
+
+// 2D Sky, Earth, Birds, Canvas Setup
+let W=innerWidth, H=innerHeight, D=Math.min(devicePixelRatio||1,1.6), ground=H*.78, personScale=1;
+const bg=$('landscape'), bc=bg.getContext('2d'), actors=$('characters'), ac=actors.getContext('2d');
+let backdrop=document.createElement('canvas');
+
+function random(seed){
+  return ()=>{ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; };
+}
+
+function renderLandscape(){
+  const c=backdrop.getContext('2d'), rand=random(2026);
+  backdrop.width=Math.ceil(W*D); backdrop.height=Math.ceil(H*D);
+  c.scale(D,D);
+
+  // Realistic Sky Gradient
+  let g=c.createLinearGradient(0,0,0,H*.77);
+  g.addColorStop(0,'#58829c');
+  g.addColorStop(.45,'#9bb5c4');
+  g.addColorStop(.8,'#dbe6dd');
+  g.addColorStop(1,'#e8ebd3');
+  c.fillStyle=g; c.fillRect(0,0,W,H);
+
+  // Soft Sun Glow
+  const sun=c.createRadialGradient(W*.72,H*.25,2,W*.72,H*.25,W*.45);
+  sun.addColorStop(0,'#fffde8c0');
+  sun.addColorStop(.15,'#fff8de35');
+  sun.addColorStop(1,'#fff8de00');
+  c.fillStyle=sun; c.fillRect(0,0,W,H*.75);
+
+  // Layered Soft Clouds
+  for(let i=0;i<35;i++){
+    const x=rand()*W, y=H*(.08+rand()*.38), s=(.04+rand()*.09)*W;
+    for(let j=0;j<6;j++){
+      let cloud=c.createRadialGradient(x+(j-2.5)*s*.5,y-Math.sin(j)*s*.1,1,x+(j-2.5)*s*.5,y,s);
+      cloud.addColorStop(0,'#fffff022');
+      cloud.addColorStop(.6,'#fffff012');
+      cloud.addColorStop(1,'#ffffff00');
+      c.fillStyle=cloud; c.fillRect(x+(j-3.8)*s*.5-s,y-s,s*2.5,s*2);
+    }
+  }
+
+  // Realistic Distant Hills & Foreground Earth
+  function hill(y,amp,col,seed){
+    c.fillStyle=col; c.beginPath(); c.moveTo(0,H);
+    for(let x=0;x<=W+15;x+=15) c.lineTo(x,y+Math.sin(x/W*7+seed)*amp+Math.sin(x/W*15+seed)*amp*.25);
+    c.lineTo(W,H); c.fill();
+  }
+  hill(H*.61,H*.026,'#8fa298',2.5);
+  hill(H*.65,H*.024,'#768c7a',4.2);
+  hill(H*.695,H*.016,'#637854',1.1);
+
+  g=c.createLinearGradient(0,H*.68,0,H);
+  g.addColorStop(0,'#7d8c55');
+  g.addColorStop(.2,'#717e47');
+  g.addColorStop(1,'#313f26');
+  c.fillStyle=g; c.fillRect(0,H*.72,W,H*.3);
+
+  // Winding Dirt Path
+  c.fillStyle='#9e986f35'; c.beginPath();
+  c.moveTo(W*.51,H*.70);
+  c.bezierCurveTo(W*.36,H*.83,W*.58,H*.90,W*.41,H);
+  c.lineTo(W*.60,H);
+  c.bezierCurveTo(W*.70,H*.85,W*.43,H*.81,W*.51,H*.70);
+  c.fill();
+
+  // Fine Grass Blades
+  for(let i=0;i<12000;i++){
+    const depth=Math.pow(rand(),.6), x=rand()*W, y=H*(.71+.3*depth), len=(1+rand()*14)*depth;
+    c.strokeStyle=['#c2ba7c64','#465a3266','#283e2c70','#a5a36870','#6a7d4690'][i%5];
+    c.lineWidth=.4+depth*.65;
+    c.beginPath(); c.moveTo(x,y);
+    c.quadraticCurveTo(x+(rand()-.5)*7,y-len*.6,x+(rand()-.5)*10,y-len);
+    c.stroke();
+  }
+}
+
+function sizeScene(){
+  W=innerWidth; H=innerHeight; D=Math.min(devicePixelRatio||1,1.6);
+  ground=H*.79; personScale=Math.max(.62,Math.min(1.1,H/780,W/700));
+  bg.width=actors.width=Math.ceil(W*D); bg.height=actors.height=Math.ceil(H*D);
+  bc.setTransform(D,0,0,D,0,0); ac.setTransform(D,0,0,D,0,0);
+  renderLandscape(); positionScene();
+}
+
+function orbSize(){ return Math.min(180,Math.max(108,W*.16),H*.22); }
+
+function positionScene(){
+  const b=$('bubble');
+  b.style.left=Math.max(172>W/2?W/2:172,Math.min(W-172,actorX*W))+'px';
+  b.style.top=(ground-190*personScale)+'px';
+  const p=$('portal'), s=orbSize();
+  p.style.width=p.style.height=s+'px';
+  p.style.left=(portalX*W)+'px';
+  p.style.top=(ground-s*.51)+'px';
+}
+
+addEventListener('resize',sizeScene); sizeScene();
+
+// Realistic & Smooth Stickman Animation Renderer
+function stickman(c,x,y,s,time,moving=false,direction=1,pulling=false,light=false){
+  c.save();
+  c.translate(x,y);
+  c.scale(s*direction,s);
+
+  const phase = time * 7.5;
+  // Natural vertical hip oscillation (bounce)
+  const bodyBob = moving ? -Math.abs(Math.sin(phase)) * 4.5 : 0;
+  const bodyLean = moving ? (pulling ? -0.15 : 0.05) : 0;
+
+  c.translate(0, bodyBob);
+  c.rotate(bodyLean);
+
+  c.strokeStyle = light ? '#eeeade' : '#18251f';
+  c.fillStyle = light ? '#eeeade' : '#18251f';
+  c.lineWidth = 4;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+
+  const hipY = -60;
+  const shoulderY = -115;
+  const neckY = -125;
+  const headCenterY = -143;
+
+  // Head
+  c.beginPath();
+  c.ellipse(0, headCenterY, 14, 17, 0, 0, Math.PI * 2);
+  c.stroke();
+
+  // Eye
+  c.fillStyle = light ? '#101613' : '#d7decc';
+  c.beginPath();
+  c.arc(5, headCenterY - 2, 1.8, 0, Math.PI * 2);
+  c.fill();
+
+  // Spine / Torso
+  c.strokeStyle = light ? '#eeeade' : '#18251f';
+  c.beginPath();
+  c.moveTo(0, neckY);
+  c.lineTo(0, hipY);
+  c.stroke();
+
+  // Realistic Leg Kinematics (2 legs)
+  for (let i = 0; i < 2; i++) {
+    const legPhase = phase + (i === 0 ? 0 : Math.PI);
+    const swing = moving ? Math.sin(legPhase) : 0;
+    
+    const thighAngle = moving ? swing * 0.42 : (i === 0 ? 0.05 : -0.05);
+    const kneeFlex = moving ? Math.max(0, Math.sin(legPhase + 0.3)) * 0.55 : 0;
+    const shinAngle = thighAngle - kneeFlex;
+
+    const kx = Math.sin(thighAngle) * 30;
+    const ky = hipY + Math.cos(thighAngle) * 30;
+
+    const fx = kx + Math.sin(shinAngle) * 29;
+    const fy = ky + Math.cos(shinAngle) * 29;
+
+    c.beginPath();
+    c.moveTo(0, hipY);
+    c.lineTo(kx, ky);
+    c.lineTo(fx, fy);
+    c.lineTo(fx + 7, fy); // Foot
+    c.stroke();
+  }
+
+  // Realistic Arm Kinematics (2 arms)
+  for (let i = 0; i < 2; i++) {
+    c.beginPath();
+    c.moveTo(0, shoulderY);
+
+    if (pulling) {
+      c.quadraticCurveTo(-25, -95 - i * 4, -55, -85 - i * 4);
+    } else {
+      const armPhase = phase + (i === 0 ? Math.PI : 0);
+      const armSwing = moving ? Math.sin(armPhase) * 0.38 : (i === 0 ? 0.08 : -0.08);
+      const elbowFlex = moving ? 0.25 + Math.abs(armSwing) * 0.2 : 0.12;
+
+      const ex = Math.sin(armSwing) * 22;
+      const ey = shoulderY + Math.cos(armSwing) * 22;
+
+      const hx = ex + Math.sin(armSwing - elbowFlex) * 20;
+      const hy = ey + Math.cos(armSwing - elbowFlex) * 20;
+
+      c.lineTo(ex, ey);
+      c.lineTo(hx, hy);
+    }
+    c.stroke();
+  }
+
+  c.restore();
+}
+
+// Pre-generated High-contrast B&W Noise Frames for Frame-rate Safe Circle Effect
+const noiseFrames=[];
+for(let f=0;f<8;f++){
+  const n=document.createElement('canvas'); n.width=n.height=128;
+  const nc=n.getContext('2d'), im=nc.createImageData(128,128);
+  for(let i=0;i<im.data.length;i+=4){
+    const v=Math.random()<.5?0:255;
+    im.data[i]=im.data[i+1]=im.data[i+2]=v;
+    im.data[i+3]=255;
+  }
+  nc.putImageData(im,0,0);
+  noiseFrames.push(n);
+}
+
+function drawNoise(time){
+  const frame=Math.floor(time*14)%8;
+  if(frame===lastNoise) return;
+  lastNoise=frame;
+  const n=$('noise').getContext('2d');
+  n.clearRect(0,0,256,256);
+  n.save();
+  n.beginPath(); n.arc(128,128,123,0,Math.PI*2); n.clip();
+  n.fillStyle='#fff'; n.fillRect(0,0,256,256);
+  n.globalAlpha=.85;
+  n.imageSmoothingEnabled=false;
+  n.drawImage(noiseFrames[frame],0,0,256,256);
+  n.restore();
+  
+  // Strong White Border Ring
+  n.strokeStyle='#ffffff'; n.lineWidth=8;
+  n.beginPath(); n.arc(128,128,123,0,Math.PI*2); n.stroke();
+}
+
+let sceneRAF=0;
+function animate(now){
+  if(appOpen){ sceneRAF=0; return; }
+  const time=now/1000;
+  
+  // Background Landscape Rendering
+  bc.clearRect(0,0,W,H);
+  bc.drawImage(backdrop,0,0,W,H);
+
+  // Birds in Sky
+  bc.strokeStyle='#334750'; bc.lineWidth=1.6;
+  for(let i=0;i<8;i++){
+    const x=((time*(14+i*2)+i*W*.15)%(W+160))-80;
+    const y=H*(.16+(i%4)*.06)+Math.sin(time*.8+i)*8;
+    const wing=reduced?2:Math.sin(time*(3.5+i*.2)+i)*6;
+    bc.beginPath();
+    bc.moveTo(x-9,y+wing);
+    bc.quadraticCurveTo(x-3,y-3,x,y+2);
+    bc.quadraticCurveTo(x+3,y-3,x+9,y+wing);
+    bc.stroke();
+  }
+
+  // Actor & Portal Rendering
+  ac.clearRect(0,0,W,H);
+  if(scene!=='waiting'&&scene!=='gone'){
+    ac.save();
+    ac.fillStyle='#152b2325';
+    ac.beginPath();
+    ac.ellipse(actorX*W,ground+3,36*personScale,5*personScale,0,0,Math.PI*2);
+    ac.fill();
+    ac.restore();
+    stickman(ac,actorX*W,ground,personScale,time,walking&&!reduced,actorDirection,dragging);
+  }
+
+  if(portalVisible){
+    drawNoise(time);
+    if(dragging){
+      ac.strokeStyle='#263b2a'; ac.lineWidth=2;
+      ac.beginPath();
+      ac.moveTo(actorX*W-62*personScale,ground-89*personScale);
+      ac.quadraticCurveTo((actorX+portalX)*W*.5,ground-45*personScale,portalX*W+orbSize()*.45,ground-orbSize()*.45);
+      ac.stroke();
+    }
+  }
+
+  positionScene();
+  sceneRAF=requestAnimationFrame(animate);
+}
+
+function startSceneRAF(){ if(!sceneRAF) sceneRAF=requestAnimationFrame(animate); }
+
+async function moveActor(to,ms,run,{pull=false,orbTo=0}={}){
+  const from=actorX, orbFrom=portalX, began=performance.now();
+  walking=true; dragging=pull;
+  actorDirection = to > from ? 1 : -1;
+  if(pull) actorDirection=1;
+  return new Promise(resolve=>{
+    function step(now){
+      if(run!==storyRun){ resolve(false); return; }
+      const p=Math.min(1,(now-began)/(reduced?500:ms));
+      const e=p*p*(3-2*p); // smooth ease
+      actorX=from+(to-from)*e;
+      if(pull) portalX=orbFrom+(orbTo-orbFrom)*e;
+      if(p<1) requestAnimationFrame(step);
+      else { walking=false; dragging=false; resolve(true); }
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+async function say(text,run){
+  $('bubble').hidden=false;
+  return typeText($('dialogue'),text,()=>run===storyRun&&!appOpen);
+}
+
+// Scene Sequence Controller
+async function introStory(){
+  const run=++storyRun;
+  scene='waiting'; actorX=1.2; portalVisible=false; portalX=-.3;
+  $('bubble').hidden=true; $('choices').hidden=true; $('again').hidden=true;
+  $('portal').hidden=true; $('portal').disabled=true; $('portal').classList.remove('ready');
+  $('scene-note').textContent='A quiet landscape awaits.';
+  startSceneRAF();
+
+  // Exactly 2 seconds delay before stickman appears
+  await sleep(2000);
+  if(run!==storyRun) return;
+
+  scene='arriving';
+  if(!await moveActor(.5,3200,run)) return;
+
+  scene='question';
+  if(!await say("Bro, you wanted to make shapes with your fingers, right? Or am I lying?",run)) return;
+  
+  $('choices').hidden=false;
+  $('yes').focus({preventScroll:true});
+}
+
+// "Yes" Choice Handler
+$('yes').onclick=async()=>{
+  if(scene!=='question') return;
+  const run=storyRun;
+  scene='fetching';
+  $('choices').hidden=true; $('bubble').hidden=true;
+
+  // Walk left to drag noise circle
+  if(!await moveActor(-.16,2400,run)) return;
+  
+  portalX=-.25; portalVisible=true;
+  $('portal').hidden=false;
+  scene='dragging';
+  
+  const target=.5 + Math.min(.27,140/W);
+  if(!await moveActor(target,3400,run,{pull:true,orbTo:.5})) return;
+
+  scene='invitation';
+  if(!await say("Tap the circle if you want to try.",run)) return;
+  
+  $('portal').disabled=false;
+  $('portal').classList.add('ready');
+  $('portal').focus({preventScroll:true});
+};
+
+// "No" Choice Handler
+$('no').onclick=async()=>{
+  if(scene!=='question') return;
+  const run=storyRun;
+  scene='farewell';
+  $('choices').hidden=true;
+
+  if(!await say("okay, see you later, friend",run)) return;
+  await sleep(1000);
+  if(run!==storyRun) return;
+
+  $('bubble').hidden=true;
+  if(!await moveActor(1.25,2800,run)) return;
+
+  scene='gone';
+  $('again').hidden=false;
+  $('scene-note').textContent='The field is quiet once more.';
+  $('again').focus({preventScroll:true});
+};
+
+$('again').onclick=introStory;
+
+// Transition into Camera Application Page
+async function enterApp(){
+  if(scene!=='invitation'||$('portal').disabled) return;
+  appOpen=true; ++storyRun;
+  $('app').hidden=false; $('app').inert=false;
+  $('intro').inert=true; $('intro').classList.add('leaving');
+  requestAnimationFrame(()=>$('app').classList.add('visible'));
+  render();
+  $('start').focus({preventScroll:true});
+  setTimeout(()=>{$('intro').hidden=true},750);
+  cameraGuide();
+}
+
+$('portal').onclick=enterApp;
+
+// Camera Page Guide Stickman
+async function cameraGuide(){
+  const run=++guideRun, container=$('camera-guide'), ga=$('guide-art'), gc=ga.getContext('2d');
+  container.hidden=false; $('guide-bubble').hidden=true; $('highlight').hidden=false;
+  
+  let entering=true, leaving=false, begin=performance.now();
+
+  function frame(now){
+    if(run!==guideRun||!appOpen){ gc.clearRect(0,0,280,400); return; }
+    const t=(now-begin)/1000, p=entering?Math.min(1,t/1.1):leaving?Math.max(0,1-t/1.1):1;
+    gc.setTransform(2,0,0,2,0,0);
+    gc.clearRect(0,0,140,200);
+    stickman(gc,70-(1-p)*180,195,.95,now/1000,(entering||leaving)&&!reduced,leaving?-1:1,false,true);
+    if(p===1) entering=false;
+    if(leaving&&p===0){ container.hidden=true; return; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  await sleep(1200);
+  if(run!==guideRun||!appOpen) return;
+
+  $('guide-bubble').hidden=false;
+  const valid=()=>run===guideRun&&appOpen;
+
+  // Camera page speech dialogue
+  await typeText($('guide-text'),'press the "Turn on camera" button and point your index finger and thumb at the camera to create a shape.',valid);
+  if(!valid()) return;
+
+  await sleep(4000);
+  if(!valid()) return;
+
+  await typeText($('guide-text'),"okay, I'm going",valid);
+  if(!valid()) return;
+
+  await sleep(1500);
+  if(!valid()) return;
+
+  $('guide-bubble').hidden=true;
+  $('highlight').hidden=true;
+  leaving=true;
+  begin=performance.now();
+}
+
+$('home').onclick=async()=>{
+  ++cameraRequest;
+  if(active) start.click();
+  ++guideRun;
+  $('camera-guide').hidden=true; $('highlight').hidden=true;
+  $('intro').hidden=false; $('intro').inert=false;
+  $('app').inert=true; $('app').classList.remove('visible'); $('intro').classList.remove('leaving');
+  appOpen=false;
+  introStory();
+  await sleep(750);
+  if(!appOpen) $('app').hidden=true;
+};
+
+// MediaPipe Script Loading Strategy
+const scriptPromises=new Map();
+function loadScript(url){
+  if(scriptPromises.has(url)) return scriptPromises.get(url);
+  const promise=new Promise((resolve,reject)=>{
+    const script=document.createElement('script'), timeout=setTimeout(()=>{
+      script.remove(); scriptPromises.delete(url);
+      reject(Error('Hand tracking taking longer to load. Please check connection.'));
+    },18000);
+    script.src=url;
+    script.onload=()=>{ clearTimeout(timeout); resolve(); };
+    script.onerror=()=>{ clearTimeout(timeout); script.remove(); scriptPromises.delete(url); reject(Error('Failed to load tracking library.')); };
+    document.head.appendChild(script);
+  });
+  scriptPromises.set(url,promise);
+  return promise;
+}
+
+async function loadTracking(){
+  await Promise.all([
+    loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js'),
+    loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js')
+  ]);
+}
+
+// Hand Tracking & Camera Processing
+const video=$('video'), canvas=$('canvas'), ctx=canvas.getContext('2d'), start=$('start'), status=$('status'), error=$('error'), effect=$('effect'), strength=$('strength'), outline=$('outline');
+let cameraRequest=0, camera=null, hands=null, points=null, filtered=null, active=false, processing=false, seen=0;
+const off=document.createElement('canvas'), ox=off.getContext('2d',{willReadFrequently:true});
+
+function resize(){
+  const d=Math.min(devicePixelRatio||1,2);
+  canvas.width=Math.round(innerWidth*d); canvas.height=Math.round(innerHeight*d);
+  ctx.setTransform(d,0,0,d,0,0);
+}
+addEventListener('resize',resize); resize();
+
+function mapping(){
+  const w=innerWidth, h=innerHeight, vw=video.videoWidth||1280, vh=video.videoHeight||720, s=Math.max(w/vw,h/vh);
+  return {x:(w-vw*s)/2, y:(h-vh*s)/2, w:vw*s, h:vh*s};
+}
+
+function pos(p,m){ return {x:m.x+(1-p.x)*m.w, y:m.y+p.y*m.h}; }
+
+function quad(landmarks){
+  const m=mapping(), a=landmarks[0], b=landmarks[1];
+  const p=[pos(a[4],m), pos(a[8],m), pos(b[8],m), pos(b[4],m)];
+  const center=q=>({x:(q[0].x+q[1].x)/2, y:(q[0].y+q[1].y)/2});
+  const c1=center(p.slice(0,2)), c2=center(p.slice(2,4));
+  if(c1.x>c2.x) return [p[2],p[3],p[0],p[1]];
+  return p;
+}
+
+function polygon(q){
+  ctx.beginPath(); ctx.moveTo(q[0].x,q[0].y);
+  for(let i=1;i<q.length;i++) ctx.lineTo(q[i].x,q[i].y);
+  ctx.closePath();
+}
+
+function effectFilter(){
+  const a=Number(strength.value)/100;
+  switch(effect.value){
+    case'invert':return `invert(${a})`;
+    case'grayscale':return `grayscale(${a})`;
+    case'sepia':return `sepia(${a})`;
+    case'blur':return `blur(${a*16}px)`;
+    case'contrast':return `contrast(${1+a*2.5})`;
+    case'saturate':return `saturate(${1+a*4})`;
+    case'hue':return `hue-rotate(${a*270}deg)`;
+    default:return 'none';
+  }
+}
+
+function render(){
+  if(appOpen) requestAnimationFrame(render);
+  const w=innerWidth, h=innerHeight;
+  ctx.clearRect(0,0,w,h);
+  if(video.readyState<2) return;
+
+  const m=mapping();
+  ctx.save(); ctx.translate(w,0); ctx.scale(-1,1);
+  ctx.drawImage(video,m.x,m.y,m.w,m.h); ctx.restore();
+
+  if(!points||performance.now()-seen>550) return;
+
+  let q=points;
+  if(!filtered) filtered=q.map(p=>({...p}));
+  else filtered=filtered.map((p,i)=>({x:p.x+(q[i].x-p.x)*.38, y:p.y+(q[i].y-p.y)*.38}));
+  q=filtered;
+
+  ctx.save(); polygon(q); ctx.clip();
+
+  if(effect.value==='pixelate'){
+    const pixel=Math.max(3,Math.round(3+Number(strength.value)*.35));
+    const sw=Math.max(1,Math.floor(w/pixel)), sh=Math.max(1,Math.floor(h/pixel));
+    off.width=sw; off.height=sh;
+    ox.save(); ox.translate(sw,0); ox.scale(-1,1);
+    ox.drawImage(video,m.x/pixel,m.y/pixel,m.w/pixel,m.h/pixel); ox.restore();
+    ctx.imageSmoothingEnabled=false;
+    ctx.drawImage(off,0,0,w,h);
+    ctx.imageSmoothingEnabled=true;
+  }else{
+    ctx.save(); ctx.filter=effectFilter();
+    ctx.translate(w,0); ctx.scale(-1,1);
+    ctx.drawImage(video,m.x,m.y,m.w,m.h); ctx.restore();
+  }
+  ctx.restore();
+
+  if(outline.checked){
+    polygon(q);
+    ctx.strokeStyle='rgba(255,255,255,.95)'; ctx.lineWidth=2.5; ctx.stroke();
+    for(const p of q){
+      ctx.beginPath(); ctx.arc(p.x,p.y,4.5,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
+    }
+  }
+}
+
+function results(r){
+  if(!active) return;
+  if(r.multiHandLandmarks?.length>=2){
+    points=quad(r.multiHandLandmarks);
+    seen=performance.now();
+    status.textContent='Two hands detected';
+  }else{
+    points=null; filtered=null;
+    status.textContent=r.multiHandLandmarks?.length?'Show your other hand':'Show both hands';
+  }
+}
+
+start.onclick=async()=>{
+  const request=++cameraRequest;
+  if(active){
+    camera?.stop(); video.srcObject?.getTracks().forEach(t=>t.stop());
+    active=false; points=null; filtered=null; video.srcObject=null;
+    start.textContent='Turn on camera'; status.textContent='Camera off';
+    return;
+  }
+
+  start.disabled=true; error.style.display='none'; status.textContent='Loading hand tracking…';
+
+  try{
+    if(!navigator.mediaDevices?.getUserMedia) throw Error('Camera access requires HTTPS or localhost server.');
+    await loadTracking();
+    if(request!==cameraRequest||!appOpen) return;
+
+    if(typeof Hands==='undefined'||typeof Camera==='undefined') throw Error('Hand tracking library failed to initialize.');
+
+    hands??=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+    hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:.65,minTrackingConfidence:.6});
+    hands.onResults(results);
+
+    camera=new Camera(video,{
+      onFrame:async()=>{
+        if(processing) return;
+        processing=true;
+        try{ await hands.send({image:video}); }catch(e){ console.error(e); }
+        finally{ processing=false; }
+      },
+      width:1280, height:720
+    });
+
+    await camera.start();
+    if(request!==cameraRequest||!appOpen){
+      camera?.stop(); video.srcObject?.getTracks().forEach(t=>t.stop()); video.srcObject=null; return;
+    }
+
+    active=true; start.textContent='Turn off camera'; status.textContent='Show both hands';
+  }catch(e){
+    camera?.stop(); video.srcObject?.getTracks().forEach(t=>t.stop()); video.srcObject=null;
+    error.textContent=e.message||String(e); error.style.display='block'; status.textContent='Camera error';
+  }finally{
+    start.disabled=false;
+  }
+};
+
+const updateEmpty=()=>{ $('empty').hidden=active; };
+new MutationObserver(updateEmpty).observe($('status'),{childList:true});
+
+addEventListener('pagehide',()=>{
+  camera?.stop(); video.srcObject?.getTracks().forEach(t=>t.stop()); audio?.suspend();
+});
+
+introStory();
+</script>
+</body>
+</html>
